@@ -15,7 +15,10 @@ export default function Toast({ toast, onDone }) {
       role="status"
       className="pointer-events-none fixed inset-x-0 top-0 z-50 flex justify-center px-4 pt-[max(1rem,env(safe-area-inset-top))]"
     >
-      <p className="rounded-full bg-slate-100 px-5 py-2.5 text-center text-sm font-semibold text-slate-900 shadow-xl">
+      <p
+        key={toast.id}
+        className="animate-rise rounded-full border border-olive/20 bg-white px-6 py-3 text-center font-display text-base text-ink shadow-soft"
+      >
         {toast.message}
       </p>
     </div>

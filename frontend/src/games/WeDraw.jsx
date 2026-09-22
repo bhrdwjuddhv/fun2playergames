@@ -4,10 +4,11 @@
 //   reveal   → see both words and drawings
 
 import { useEffect, useRef, useState } from 'react'
+import { DashedDivider } from '../components/Decor.jsx'
 
-// Must match COLOR_COUNT / SIZE_COUNT on the server. The last color is
-// white = eraser.
-const COLORS = ['#111827', '#ef4444', '#f97316', '#eab308', '#22c55e', '#3b82f6', '#a855f7', '#92400e', '#ffffff']
+// Must match COLOR_COUNT / SIZE_COUNT on the server (9 colors, 3 sizes).
+// A muted palette that fits the design; the last color is white = eraser.
+const COLORS = ['#2d342f', '#7f8d74', '#c0634a', '#fab078', '#d4af37', '#6f8faf', '#8a5a7a', '#8b6b4a', '#ffffff']
 const SIZES = [0.008, 0.02, 0.045] // brush width as a fraction of the canvas width
 const MAX_POINTS_PER_STROKE = 400
 
@@ -62,56 +63,73 @@ function useSecondsLeft(timeLeftMs) {
   return secondsLeft
 }
 
-const CANVAS_SIZE = { width: 'min(100%, 50dvh, 520px)' }
+const CANVAS_SIZE = { width: 'min(100%, 48dvh, 500px)' }
+
+const PHASE_TITLES = {
+  drawing: 'Draw your word',
+  guessing: 'Guess their drawing',
+  reveal: 'The reveal',
+  done: 'The final gallery',
+}
 
 export default function WeDraw({ state, mySeat, opponentName, sendAction, showToast }) {
   const secondsLeft = useSecondsLeft(state.timeLeftMs)
   const other = 1 - mySeat
-
-  const phaseLabel = { drawing: 'Draw!', guessing: 'Guess!', reveal: 'Round over', done: 'Game over' }[state.phase]
+  const timed = state.phase === 'drawing' || state.phase === 'guessing'
 
   return (
-    <div className="mx-auto flex w-full max-w-xl flex-1 flex-col gap-3 overflow-y-auto p-3">
-      {/* Round / timer / scores */}
-      <div className="flex items-center justify-between gap-2 text-sm">
-        <span className="rounded-full bg-slate-800 px-3 py-1 font-semibold">
-          Round {state.round}/{state.totalRounds} · {phaseLabel}
-        </span>
-        {(state.phase === 'drawing' || state.phase === 'guessing') && (
-          <span
-            className={`rounded-full px-3 py-1 font-mono text-base font-bold ${
-              secondsLeft <= 5 ? 'bg-rose-500 text-white' : 'bg-slate-800'
-            }`}
-          >
-            ⏱ {secondsLeft}s
+    <section className="flex flex-1 flex-col bg-white">
+      <div className="mx-auto flex w-full max-w-xl flex-1 flex-col gap-4 px-4 py-5">
+        {/* Round, phase and timer */}
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="eyebrow text-muted">
+              Round {state.round} of {state.totalRounds}
+            </p>
+            <h2 key={state.phase} className="animate-rise font-script text-4xl leading-tight text-olive">
+              {PHASE_TITLES[state.phase]}
+            </h2>
+          </div>
+          {timed && (
+            <span
+              className={`flex size-14 shrink-0 items-center justify-center rounded-full border font-display text-2xl transition-colors duration-500 ${
+                secondsLeft <= 5 ? 'border-saffron bg-saffron text-ink' : 'border-olive/40 text-ink'
+              }`}
+              aria-label={`${secondsLeft} seconds left`}
+            >
+              {secondsLeft}
+            </span>
+          )}
+        </div>
+
+        <p className="text-center font-display text-lg tracking-[0.15em] uppercase">
+          <span className="text-olive">You {state.scores[mySeat]}</span>
+          <span className="mx-2 text-gold">·</span>
+          <span className="text-muted">
+            {opponentName} {state.scores[other]}
           </span>
+        </p>
+        <DashedDivider className="mx-auto -mt-1 w-32 text-olive/70" />
+
+        {/* A new `key` per round → fresh canvas every round */}
+        {state.phase === 'drawing' && (
+          <DrawPhase key={state.round} state={state} sendAction={sendAction} showToast={showToast} />
+        )}
+        {state.phase === 'guessing' && (
+          <GuessPhase
+            key={state.round}
+            state={state}
+            mySeat={mySeat}
+            opponentName={opponentName}
+            sendAction={sendAction}
+            showToast={showToast}
+          />
+        )}
+        {(state.phase === 'reveal' || state.phase === 'done') && (
+          <RevealPhase state={state} mySeat={mySeat} opponentName={opponentName} />
         )}
       </div>
-      <div className="flex justify-between text-sm font-semibold">
-        <span className="text-violet-300">You: {state.scores[mySeat]}</span>
-        <span className="text-slate-300">
-          {opponentName}: {state.scores[other]}
-        </span>
-      </div>
-
-      {/* A new `key` per round → fresh canvas every round */}
-      {state.phase === 'drawing' && (
-        <DrawPhase key={state.round} state={state} sendAction={sendAction} showToast={showToast} />
-      )}
-      {state.phase === 'guessing' && (
-        <GuessPhase
-          key={state.round}
-          state={state}
-          mySeat={mySeat}
-          opponentName={opponentName}
-          sendAction={sendAction}
-          showToast={showToast}
-        />
-      )}
-      {(state.phase === 'reveal' || state.phase === 'done') && (
-        <RevealPhase state={state} mySeat={mySeat} opponentName={opponentName} />
-      )}
-    </div>
+    </section>
   )
 }
 
@@ -199,57 +217,68 @@ function DrawPhase({ state, sendAction, showToast }) {
 
   return (
     <>
-      <p className="text-center text-lg">
-        Draw: <span className="font-black text-violet-300 uppercase">{state.myWord}</span>
-        <span className="block text-xs text-slate-500">Don't write the word — draw it!</span>
-      </p>
+      <div className="text-center">
+        <p className="eyebrow text-muted">Your secret word</p>
+        <p className="font-display text-3xl tracking-[0.12em] text-olive uppercase">{state.myWord}</p>
+        <p className="font-script text-2xl text-muted">draw it — don’t write it</p>
+      </div>
 
-      <canvas
-        ref={canvasRef}
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={finishStroke}
-        onPointerCancel={finishStroke}
-        // touch-none: stops the page from scrolling while you draw on a phone
-        className="mx-auto aspect-square touch-none rounded-2xl bg-white shadow-lg"
-        style={CANVAS_SIZE}
-      />
+      {/* Not rotated: a rotated canvas would make the finger position wrong. */}
+      <div className="photo-frame mx-auto" style={CANVAS_SIZE}>
+        <canvas
+          ref={canvasRef}
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={finishStroke}
+          onPointerCancel={finishStroke}
+          // touch-none: stops the page from scrolling while you draw on a phone
+          className="aspect-square w-full touch-none rounded-sm bg-white ring-1 ring-ink/5"
+        />
+      </div>
 
       {/* Tools */}
-      <div className="flex flex-wrap items-center justify-center gap-2">
-        {COLORS.map((hex, index) => (
-          <button
-            key={hex}
-            type="button"
-            onClick={() => setColor(index)}
-            aria-label={index === COLORS.length - 1 ? 'Eraser' : `Color ${index + 1}`}
-            className={`flex size-9 items-center justify-center rounded-full ring-2 ring-offset-2 ring-offset-slate-950 ${
-              color === index ? 'ring-violet-400' : 'ring-transparent'
-            }`}
-            style={{ background: hex }}
-          >
-            {index === COLORS.length - 1 && <span className="text-sm">🧽</span>}
-          </button>
-        ))}
+      <div className="flex flex-wrap items-center justify-center gap-2.5">
+        {COLORS.map((hex, index) => {
+          const isEraser = index === COLORS.length - 1
+          return (
+            <button
+              key={hex}
+              type="button"
+              onClick={() => setColor(index)}
+              aria-label={isEraser ? 'Eraser' : `Color ${index + 1}`}
+              aria-pressed={color === index}
+              className={`flex size-9 items-center justify-center rounded-full ring-offset-2 transition duration-300 ${
+                color === index ? 'scale-110 ring-2 ring-olive' : 'ring-1 ring-olive/20'
+              }`}
+              style={{ background: hex }}
+            >
+              {isEraser && <span className="font-display text-xs text-muted">E</span>}
+            </button>
+          )
+        })}
       </div>
-      <div className="flex items-center justify-center gap-2">
+      <div className="flex flex-wrap items-center justify-center gap-2">
         {SIZES.map((_, index) => (
           <button
             key={index}
             type="button"
             onClick={() => setSize(index)}
             aria-label={`Brush size ${index + 1}`}
-            className={`flex size-11 items-center justify-center rounded-xl ${
-              size === index ? 'bg-violet-500' : 'bg-slate-800'
+            aria-pressed={size === index}
+            className={`flex size-11 items-center justify-center rounded-full border transition duration-300 ${
+              size === index ? 'border-olive bg-olive' : 'border-olive/25 bg-ivory'
             }`}
           >
-            <span className="rounded-full bg-white" style={{ width: 6 + index * 7, height: 6 + index * 7 }} />
+            <span
+              className={`rounded-full ${size === index ? 'bg-white' : 'bg-ink'}`}
+              style={{ width: 5 + index * 7, height: 5 + index * 7 }}
+            />
           </button>
         ))}
-        <button type="button" onClick={undo} className="h-11 rounded-xl bg-slate-800 px-4 font-semibold">
-          ↶ Undo
+        <button type="button" onClick={undo} className="btn-outline h-11 px-5 text-xs">
+          Undo
         </button>
-        <button type="button" onClick={clear} className="h-11 rounded-xl bg-slate-800 px-4 font-semibold">
+        <button type="button" onClick={clear} className="btn-outline h-11 px-5 text-xs">
           Clear
         </button>
       </div>
@@ -257,7 +286,7 @@ function DrawPhase({ state, sendAction, showToast }) {
   )
 }
 
-// A drawing you can only look at (their drawing, or the reveal).
+// A drawing you can only look at, shown like a printed photograph.
 function DrawingView({ strokes, className = '', style }) {
   const canvasRef = useRef(null)
 
@@ -270,7 +299,11 @@ function DrawingView({ strokes, className = '', style }) {
     return () => observer.disconnect()
   }, [strokes])
 
-  return <canvas ref={canvasRef} className={`aspect-square rounded-2xl bg-white ${className}`} style={style} />
+  return (
+    <div className={`photo-frame ${className}`} style={style}>
+      <canvas ref={canvasRef} className="aspect-square w-full rounded-sm bg-white ring-1 ring-ink/5" />
+    </div>
+  )
 }
 
 function GuessPhase({ state, mySeat, opponentName, sendAction, showToast }) {
@@ -288,7 +321,7 @@ function GuessPhase({ state, mySeat, opponentName, sendAction, showToast }) {
       return
     }
     if (response.result?.correct) {
-      showToast(`Correct! +${response.result.points}`)
+      showToast(`Correct — +${response.result.points}`)
     } else {
       setWrong(true)
       setGuess('')
@@ -297,22 +330,25 @@ function GuessPhase({ state, mySeat, opponentName, sendAction, showToast }) {
 
   return (
     <>
-      <p className="text-center">
-        What did <span className="font-bold">{opponentName}</span> draw?
-      </p>
+      <p className="text-center font-display text-lg text-muted italic">What did {opponentName} draw?</p>
 
-      <DrawingView strokes={state.theirDrawing} className="mx-auto shadow-lg" style={CANVAS_SIZE} />
+      <DrawingView strokes={state.theirDrawing} className="mx-auto -rotate-1" style={CANVAS_SIZE} />
 
       {/* "___ _____" = letters and spaces of the word */}
-      <p className="text-center font-mono text-2xl tracking-[0.35em]">{state.hint}</p>
+      <p className="text-center font-display text-3xl tracking-[0.35em] text-ink" aria-label="Word length hint">
+        {state.hint}
+      </p>
 
       {iGuessed ? (
-        <p className="rounded-xl bg-emerald-500/15 p-3 text-center font-semibold text-emerald-300">
-          ✓ You got it: <span className="uppercase">{state.theirWord}</span> (+{state.roundPoints[mySeat]})
+        <p className="rounded-[24px] bg-ivory p-4 text-center">
+          <span className="font-script text-3xl text-olive">Beautifully guessed</span>
+          <span className="mt-1 block font-display text-lg tracking-[0.12em] uppercase">
+            {state.theirWord} <span className="text-gold">+{state.roundPoints[mySeat]}</span>
+          </span>
         </p>
       ) : (
-        // position: sticky keeps the input above the phone keyboard area.
-        <form onSubmit={submit} className="sticky bottom-0 flex gap-2 bg-slate-950 py-1">
+        // position: sticky keeps the input visible above the phone keyboard.
+        <form onSubmit={submit} className="sticky bottom-0 flex gap-2 bg-white py-2">
           <input
             value={guess}
             onChange={(event) => {
@@ -320,22 +356,24 @@ function GuessPhase({ state, mySeat, opponentName, sendAction, showToast }) {
               setWrong(false)
             }}
             maxLength={50}
-            placeholder={wrong ? 'Nope — try again' : 'Type your guess'}
+            placeholder={wrong ? 'Not quite — try again' : 'Your guess'}
             autoComplete="off"
             autoCorrect="off"
             autoCapitalize="none"
             enterKeyHint="send"
-            className={`h-12 min-w-0 flex-1 rounded-xl bg-slate-800 px-4 text-lg outline-none focus:ring-2 ${
-              wrong ? 'ring-2 ring-rose-500' : 'ring-violet-400'
+            className={`h-13 min-w-0 flex-1 rounded-full border bg-ivory px-5 font-display text-xl outline-none transition-colors ${
+              wrong ? 'border-saffron placeholder:text-saffron' : 'border-olive/30 focus:border-olive'
             }`}
           />
-          <button type="submit" className="h-12 rounded-xl bg-violet-500 px-5 font-bold text-white">
+          <button type="submit" className="btn-primary px-6">
             Guess
           </button>
         </form>
       )}
 
-      {theyGuessed && <p className="text-center text-sm text-emerald-300">{opponentName} guessed your word!</p>}
+      {theyGuessed && (
+        <p className="text-center font-script text-2xl text-olive">{opponentName} guessed your word</p>
+      )}
     </>
   )
 }
@@ -343,19 +381,23 @@ function GuessPhase({ state, mySeat, opponentName, sendAction, showToast }) {
 function RevealPhase({ state, mySeat, opponentName }) {
   const other = 1 - mySeat
   const cards = [
-    { title: 'You drew', seat: mySeat, pointsLabel: `${opponentName} got +${state.roundPoints[other]}` },
-    { title: `${opponentName} drew`, seat: other, pointsLabel: `You got +${state.roundPoints[mySeat]}` },
+    { title: 'You drew', seat: mySeat, tilt: '-rotate-2', note: `${opponentName} +${state.roundPoints[other]}` },
+    { title: `${opponentName} drew`, seat: other, tilt: 'rotate-2', note: `You +${state.roundPoints[mySeat]}` },
   ]
 
   return (
-    <div className={`grid grid-cols-2 gap-3 ${state.phase === 'done' ? 'pb-48' : ''}`}>
-      {cards.map((card) => (
-        <div key={card.seat} className="flex flex-col gap-1.5 text-center">
-          <p className="text-sm text-slate-400">{card.title}</p>
-          <p className="font-black text-violet-300 uppercase">{state.words[card.seat]}</p>
-          <DrawingView strokes={state.drawings[card.seat]} className="w-full" />
-          <p className="text-xs text-slate-400">{card.pointsLabel}</p>
-        </div>
+    <div className={`grid grid-cols-2 gap-4 pt-2 ${state.phase === 'done' ? 'pb-56' : ''}`}>
+      {cards.map((card, index) => (
+        <figure
+          key={card.seat}
+          className="flex animate-rise flex-col items-center text-center"
+          style={{ animationDelay: `${index * 150}ms` }}
+        >
+          <figcaption className="eyebrow mb-2 max-w-full truncate text-muted">{card.title}</figcaption>
+          <DrawingView strokes={state.drawings[card.seat]} className={`w-full ${card.tilt}`} />
+          <p className="mt-3 font-script text-3xl leading-none text-olive">{state.words[card.seat]}</p>
+          <p className="mt-1 font-display text-sm tracking-[0.12em] text-muted uppercase">{card.note}</p>
+        </figure>
       ))}
     </div>
   )

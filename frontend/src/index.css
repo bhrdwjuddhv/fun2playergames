@@ -1,5 +1,43 @@
 @import "tailwindcss";
 
+/* Design tokens. Tailwind turns these into classes:
+   bg-olive, text-gold, font-display, font-script, animate-rise, ... */
+@theme {
+  --color-olive: #7f8d74;        /* primary */
+  --color-olive-deep: #6c7962;   /* hover / pressed */
+  --color-saffron: #fab078;      /* romantic accent */
+  --color-gold: #d4af37;         /* luxury highlights */
+  --color-ivory: #f9f8f6;        /* warm off-white surface */
+  --color-ink: #2d342f;          /* primary text */
+  --color-muted: #5c635e;        /* secondary text */
+
+  --font-display: "Forum", Georgia, serif;
+  --font-sans: "Plus Jakarta Sans", system-ui, sans-serif;
+  --font-script: "Dynalight", cursive;
+
+  --shadow-soft: 0 18px 50px -24px rgb(45 52 47 / 0.35);
+  --shadow-deep: 0 40px 80px -30px rgb(45 52 47 / 0.55);
+
+  --animate-rise: rise 1s ease-out both;
+  --animate-invite: invite 4.5s ease-out both;
+  --animate-slow-zoom: slow-zoom 20s ease-out both;
+
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(24px); }
+    to { opacity: 1; transform: none; }
+  }
+  /* The floating invitation card: fades/scales in, stays, fades away. */
+  @keyframes invite {
+    0% { opacity: 0; transform: translate(-50%, -46%) scale(0.92) rotate(-3deg); }
+    18%, 78% { opacity: 1; transform: translate(-50%, -50%) scale(1) rotate(-3deg); }
+    100% { opacity: 0; transform: translate(-50%, -54%) scale(1.02) rotate(-3deg); }
+  }
+  @keyframes slow-zoom {
+    from { transform: scale(1); }
+    to { transform: scale(1.1); }
+  }
+}
+
 @layer base {
   html,
   body,
@@ -8,8 +46,7 @@
   }
 
   body {
-    @apply bg-slate-950 text-slate-100 antialiased;
-    font-family: system-ui, "Segoe UI", Roboto, sans-serif;
+    @apply bg-ivory font-sans text-ink antialiased;
     /* no pull-to-refresh / bounce while playing on a phone */
     overscroll-behavior: none;
     -webkit-tap-highlight-color: transparent;
@@ -22,5 +59,44 @@
 
   button:disabled {
     cursor: default;
+  }
+}
+
+/* Reusable pieces used across screens. */
+@layer components {
+  /* Uppercase, widely spaced label ("YOU ARE INVITED") */
+  .eyebrow {
+    @apply font-sans text-[11px] font-semibold tracking-[0.32em] uppercase;
+  }
+
+  /* Olive pill button */
+  .btn-primary {
+    @apply inline-flex h-13 items-center justify-center rounded-full bg-olive px-9 font-sans text-sm font-semibold tracking-[0.18em] text-white uppercase transition duration-300 hover:scale-[1.03] hover:bg-olive-deep active:scale-[0.98] disabled:opacity-50 disabled:hover:scale-100;
+  }
+
+  /* Outlined pill button */
+  .btn-outline {
+    @apply inline-flex h-13 items-center justify-center rounded-full border border-olive px-7 font-sans text-sm font-semibold tracking-[0.18em] text-olive uppercase transition duration-300 hover:scale-[1.03] hover:bg-olive/5 active:scale-[0.98] disabled:opacity-50;
+  }
+
+  /* White card: large radius, thin border, soft shadow */
+  .card {
+    @apply rounded-[32px] border border-olive/15 bg-white shadow-soft;
+  }
+
+  /* Printed-photo frame (white border + shadow), used for drawings */
+  .photo-frame {
+    @apply rounded-lg bg-white p-2.5 pb-4 shadow-soft ring-1 ring-ink/5;
+  }
+}
+
+/* Respect "reduce motion" in the phone/OS settings. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }

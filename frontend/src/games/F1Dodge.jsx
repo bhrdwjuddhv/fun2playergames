@@ -8,8 +8,11 @@
 //     the server which lane you want. The server decides collisions.
 
 import { useEffect, useRef } from 'react'
+import { Heart } from '../components/Decor.jsx'
 
-const CAR_COLORS = ['#ef4444', '#3b82f6'] // seat 0 red, seat 1 blue
+// Colors from the design palette.
+const CAR_COLORS = ['#fab078', '#f9f8f6'] // seat 0 saffron, seat 1 ivory
+const ROAD = '#2d342f'
 
 function drawCar(ctx, centerX, top, laneWidth, carHeight, color) {
   const width = laneWidth * 0.42
@@ -40,30 +43,30 @@ function drawObstacle(ctx, type, laneLeft, top, laneWidth, height) {
 
   if (type === 'car') {
     const width = laneWidth * 0.46
-    ctx.fillStyle = '#facc15'
+    ctx.fillStyle = '#8a9480'
     ctx.fillRect(centerX - width / 2, top, width, height)
-    ctx.fillStyle = '#1e293b'
+    ctx.fillStyle = '#d4af37'
     ctx.fillRect(centerX - width * 0.35, top + height * 0.18, width * 0.7, height * 0.22) // windscreen
   } else if (type === 'barrier') {
     const width = laneWidth * 0.78
     const stripes = 6
     for (let i = 0; i < stripes; i++) {
-      ctx.fillStyle = i % 2 ? '#ffffff' : '#dc2626'
+      ctx.fillStyle = i % 2 ? '#ffffff' : '#7f8d74'
       ctx.fillRect(centerX - width / 2 + (width / stripes) * i, top + height * 0.25, width / stripes, height * 0.5)
     }
   } else if (type === 'oil') {
-    ctx.fillStyle = '#020617'
+    ctx.fillStyle = '#151a17'
     ctx.beginPath()
     ctx.ellipse(centerX, top + height / 2, laneWidth * 0.26, height * 0.45, 0, 0, Math.PI * 2)
     ctx.fill()
-    ctx.fillStyle = 'rgba(148,163,184,0.35)' // shine
+    ctx.fillStyle = 'rgba(249,248,246,0.25)' // shine
     ctx.beginPath()
     ctx.ellipse(centerX - laneWidth * 0.07, top + height * 0.35, laneWidth * 0.07, height * 0.1, 0, 0, Math.PI * 2)
     ctx.fill()
   } else {
     // cone
     const width = laneWidth * 0.26
-    ctx.fillStyle = '#f97316'
+    ctx.fillStyle = '#d4af37'
     ctx.beginPath()
     ctx.moveTo(centerX, top)
     ctx.lineTo(centerX + width / 2, top + height)
@@ -124,23 +127,23 @@ export default function F1Dodge({ state, mySeat, opponentName, sendAction }) {
       const laneWidth = width / lanes
 
       // Road + moving lane markings (this is what makes it feel fast).
-      ctx.fillStyle = '#334155'
+      ctx.fillStyle = ROAD
       ctx.fillRect(0, 0, width, height)
       const dash = height * 0.08
       const gap = height * 0.06
       const moved = running ? snapshot.speed * seconds * height : 0
       roadOffset = (roadOffset + moved) % (dash + gap)
       kerbOffset = (kerbOffset + moved) % (dash * 2)
-      ctx.fillStyle = 'rgba(255,255,255,0.55)'
+      ctx.fillStyle = 'rgba(249,248,246,0.4)'
       for (let lane = 1; lane < lanes; lane++) {
         const x = lane * laneWidth - 2 * ratio
         for (let y = roadOffset - dash; y < height; y += dash + gap) {
           ctx.fillRect(x, y, 4 * ratio, dash)
         }
       }
-      // red/white kerbs on both sides
+      // olive/white kerbs on both sides
       for (let i = 0, y = kerbOffset - dash * 2; y < height; i++, y += dash) {
-        ctx.fillStyle = i % 2 ? '#ffffff' : '#dc2626'
+        ctx.fillStyle = i % 2 ? '#f9f8f6' : '#7f8d74'
         ctx.fillRect(0, y, 5 * ratio, dash)
         ctx.fillRect(width - 5 * ratio, y, 5 * ratio, dash)
       }
@@ -161,7 +164,7 @@ export default function F1Dodge({ state, mySeat, opponentName, sendAction }) {
         // Slide smoothly towards the lane instead of jumping.
         carX[seat] = carX[seat] === null ? targetX : carX[seat] + (targetX - carX[seat]) * Math.min(1, seconds * 16)
 
-        let alpha = seat === mySeat ? 1 : 0.45
+        let alpha = seat === mySeat ? 1 : 0.5
         if (!car.alive) alpha = 0.2
         else if (car.invincible && Math.floor(now / 120) % 2) alpha *= 0.3 // blink after a hit
         ctx.globalAlpha = alpha
@@ -203,59 +206,77 @@ export default function F1Dodge({ state, mySeat, opponentName, sendAction }) {
 
   const me = state.cars[mySeat]
   const opponent = state.cars[1 - mySeat]
-  const hearts = (lives) => '❤️'.repeat(lives) + '🖤'.repeat(Math.max(0, 3 - lives))
 
   return (
-    <div className="mx-auto flex min-h-0 w-full max-w-md flex-1 flex-col gap-2 p-2">
-      {/* HUD */}
-      <div className="grid grid-cols-3 items-center gap-2 text-sm">
-        <div>
-          <p className="font-bold" style={{ color: CAR_COLORS[mySeat] }}>You</p>
-          <p>{hearts(me.lives)}</p>
-          <p className="font-mono">{me.score}</p>
+    // The race is the most dramatic screen: full olive background.
+    <section className="flex min-h-0 flex-1 flex-col bg-olive text-white">
+      <div className="mx-auto flex min-h-0 w-full max-w-md flex-1 flex-col gap-3 px-3 pt-3 pb-3">
+        {/* Scoreboard */}
+        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
+          <Driver label="You" color={CAR_COLORS[mySeat]} car={me} />
+          <div className="text-center">
+            <p className="eyebrow text-white/70">Seconds</p>
+            <p className="font-display text-4xl leading-none">{Math.ceil(state.timeLeftMs / 1000)}</p>
+          </div>
+          <Driver label={opponentName} color={CAR_COLORS[1 - mySeat]} car={opponent} alignRight />
         </div>
-        <p className="text-center font-mono text-2xl font-black">{Math.ceil(state.timeLeftMs / 1000)}s</p>
-        <div className="text-right">
-          <p className="truncate font-bold" style={{ color: CAR_COLORS[1 - mySeat] }}>{opponentName}</p>
-          <p>{opponent.alive ? hearts(opponent.lives) : 'OUT'}</p>
-          <p className="font-mono">{opponent.score}</p>
-        </div>
-      </div>
 
-      <div className="relative min-h-0 flex-1">
-        <canvas
-          ref={canvasRef}
-          onPointerDown={onCanvasPointerDown}
-          className="size-full touch-none rounded-2xl"
-        />
-        {!me.alive && !state.result && (
-          <p className="absolute inset-x-0 top-1/3 text-center text-3xl font-black drop-shadow-lg">
-            💥 You're out!
-            <span className="block text-base font-semibold">{opponentName} is still racing…</span>
-          </p>
+        {/* The track, framed with a thin white border like an editorial photo */}
+        <div className="relative min-h-0 flex-1 overflow-hidden rounded-[28px] shadow-deep">
+          <canvas ref={canvasRef} onPointerDown={onCanvasPointerDown} className="size-full touch-none" />
+          <div className="pointer-events-none absolute inset-2.5 rounded-[20px] border border-white/50" />
+          {!me.alive && !state.result && (
+            <div className="absolute inset-x-6 top-1/3 animate-rise rounded-[24px] bg-white/95 p-5 text-center text-ink shadow-deep">
+              <p className="font-script text-5xl text-olive">Out of lives</p>
+              <p className="mt-1 font-display text-sm tracking-[0.15em] text-muted uppercase">
+                {opponentName} is still racing
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* Big thumb buttons for phones */}
+        {!state.result && (
+          <div className="grid grid-cols-2 gap-3">
+            <SteerButton label="Steer left" onPress={() => steer(-1)} flip />
+            <SteerButton label="Steer right" onPress={() => steer(1)} />
+          </div>
         )}
+        {state.result && <div className="h-52 shrink-0" /> /* room for the result sheet */}
       </div>
+    </section>
+  )
+}
 
-      {/* Big thumb buttons for phones */}
-      <div className={`grid grid-cols-2 gap-2 ${state.result ? 'hidden' : ''}`}>
-        <button
-          type="button"
-          onPointerDown={() => steer(-1)}
-          className="h-20 touch-none rounded-2xl bg-slate-800 text-4xl select-none active:bg-slate-700"
-          aria-label="Steer left"
-        >
-          ◀
-        </button>
-        <button
-          type="button"
-          onPointerDown={() => steer(1)}
-          className="h-20 touch-none rounded-2xl bg-slate-800 text-4xl select-none active:bg-slate-700"
-          aria-label="Steer right"
-        >
-          ▶
-        </button>
-      </div>
-      {state.result && <div className="h-44 shrink-0" /> /* room for the result sheet */}
+function Driver({ label, color, car, alignRight = false }) {
+  return (
+    <div className={`min-w-0 ${alignRight ? 'text-right' : ''}`}>
+      <p className={`flex items-center gap-1.5 ${alignRight ? 'justify-end' : ''}`}>
+        <span className="size-2.5 shrink-0 rounded-full ring-1 ring-white/60" style={{ background: color }} />
+        <span className="truncate font-script text-3xl leading-none">{label}</span>
+      </p>
+      <p className={`mt-1 flex gap-0.5 ${alignRight ? 'justify-end' : ''}`} aria-label={`${car.lives} lives`}>
+        {[0, 1, 2].map((index) => (
+          <Heart key={index} className={`size-4 ${index < car.lives ? 'fill-saffron text-saffron' : 'text-white/40'}`} />
+        ))}
+      </p>
+      <p className="font-display text-lg tracking-[0.1em]">{car.alive ? car.score : 'Out'}</p>
     </div>
+  )
+}
+
+function SteerButton({ label, onPress, flip = false }) {
+  return (
+    <button
+      type="button"
+      // onPointerDown (not onClick) reacts the moment the finger touches.
+      onPointerDown={onPress}
+      aria-label={label}
+      className="flex h-20 touch-none items-center justify-center rounded-full border border-white/40 bg-white/10 transition duration-200 select-none active:scale-95 active:bg-white/25"
+    >
+      <svg viewBox="0 0 24 24" className={`size-8 ${flip ? '-scale-x-100' : ''}`} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M9 5l7 7-7 7" />
+      </svg>
+    </button>
   )
 }

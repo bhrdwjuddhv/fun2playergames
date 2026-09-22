@@ -87,7 +87,7 @@ export default function App() {
   return (
     <div className="flex h-full flex-col">
       {!connected && (
-        <div className="bg-amber-500 px-4 py-1.5 text-center text-sm font-semibold text-amber-950">
+        <div className="bg-saffron px-4 py-1.5 pt-[max(0.375rem,env(safe-area-inset-top))] text-center font-display text-sm tracking-[0.2em] text-ink uppercase">
           Reconnecting…
         </div>
       )}
