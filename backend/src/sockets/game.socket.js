@@ -11,7 +11,7 @@ import { on, requireRoom, broadcastRoom, playerChannel } from './helpers.js';
 export function startGameForRoom(io, room) {
     const playerIds = room.players.map((player) => player.playerId);
 
-    gameService.startGame(room.roomCode, room.selectedGame, playerIds, {
+    gameService.startGame(room.roomCode, room.selectedGame, room.selectedMode, playerIds, {
         onState: (playerId, state) => {
             io.to(playerChannel(playerId)).emit('game:state', state);
         },

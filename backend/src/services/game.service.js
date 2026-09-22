@@ -24,12 +24,13 @@ const stateFor = (entry, seat) => ({
     match: entry.matchNumber,
 });
 
-// roomCode → { gameId, playerIds, game, callbacks, result, rematchSeats, matchNumber }
+// roomCode → { gameId, mode, playerIds, game, callbacks, result, rematchSeats, matchNumber }
 const activeGames = new Map();
 
 // callbacks.onState(playerId, state) — send a state to one player
 // callbacks.onEnd(result)            — the game just finished
-const startGame = (roomCode, gameId, playerIds, callbacks, matchNumber = 0) => {
+// mode: the chosen game mode ("bo5", "coop"...) or null.
+const startGame = (roomCode, gameId, mode, playerIds, callbacks, matchNumber = 0) => {
     const gameModule = getGame(gameId);
     if (!gameModule) {
         throw new ApiError(400, 'Unknown game');
@@ -39,6 +40,7 @@ const startGame = (roomCode, gameId, playerIds, callbacks, matchNumber = 0) => {
 
     const entry = {
         gameId,
+        mode,
         playerIds,
         callbacks,
         matchNumber,
@@ -69,7 +71,7 @@ const startGame = (roomCode, gameId, playerIds, callbacks, matchNumber = 0) => {
     };
 
     activeGames.set(roomCode, entry);
-    entry.game = gameModule.create(api, { matchNumber });
+    entry.game = gameModule.create(api, { matchNumber, mode });
     sendState();
 };
 
@@ -116,7 +118,7 @@ const requestRematch = (roomCode, playerId) => {
         return false;
     }
 
-    startGame(roomCode, entry.gameId, entry.playerIds, entry.callbacks, entry.matchNumber + 1);
+    startGame(roomCode, entry.gameId, entry.mode, entry.playerIds, entry.callbacks, entry.matchNumber + 1);
     return true;
 };
 

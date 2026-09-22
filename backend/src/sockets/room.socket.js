@@ -59,9 +59,9 @@ export function registerRoomHandlers(io, socket) {
         return {};
     });
 
-    on(socket, 'room:vote', async ({ gameId }) => {
+    on(socket, 'room:vote', async ({ gameId, mode }) => {
         const { roomCode, playerId } = requireRoom(socket);
-        const { room, gameStarted } = await roomService.castVote(roomCode, playerId, gameId);
+        const { room, gameStarted } = await roomService.castVote(roomCode, playerId, gameId, mode);
 
         // Room first (so the client shows the game screen), then the game's
         // first state.

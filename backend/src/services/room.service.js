@@ -123,7 +123,7 @@ const leaveRoom = async (roomCode, playerId) => {
         {
             $pull: { players: { playerId: cleanPlayerId(playerId) } },
             // The remaining player waits for a new opponent.
-            $set: { status: 'waiting', selectedGame: null, votes: {} },
+            $set: { status: 'waiting', selectedGame: null, selectedMode: null, votes: {} },
         },
         { returnDocument: 'after' }
     );
@@ -151,19 +151,35 @@ const markDisconnected = async (roomCode, playerId, socketId) => {
     );
 };
 
+// A vote is saved as one string: "gameId" or "gameId:mode".
+const splitVote = (vote) => {
+    const [gameId, mode = null] = vote.split(':');
+    return { gameId, mode };
+};
+
 // Saves one vote. When both players have voted, picks the game.
 // Returns { room, gameStarted }.
-const castVote = async (roomCode, playerId, gameId) => {
+const castVote = async (roomCode, playerId, gameId, mode) => {
     const cleanId = cleanPlayerId(playerId);
 
-    // Never trust the client: only accept games that really exist.
-    if (typeof gameId !== 'string' || !getGame(gameId)) {
+    // Never trust the client: only accept games (and modes) that really exist.
+    const game = typeof gameId === 'string' ? getGame(gameId) : null;
+    if (!game) {
         throw new ApiError(400, 'Unknown game');
+    }
+    let vote = gameId;
+    if (game.modes) {
+        // No mode chosen → the game's first (default) mode.
+        const chosenMode = mode ?? game.modes[0].id;
+        if (!game.modes.some((option) => option.id === chosenMode)) {
+            throw new ApiError(400, 'Unknown game mode');
+        }
+        vote = `${gameId}:${chosenMode}`;
     }
 
     const room = await Room.findOneAndUpdate(
         { roomCode, status: 'voting', 'players.playerId': cleanId },
-        { $set: { [`votes.${cleanId}`]: gameId } },
+        { $set: { [`votes.${cleanId}`]: vote } },
         { returnDocument: 'after' }
     );
     if (!room) {
@@ -177,13 +193,13 @@ const castVote = async (roomCode, playerId, gameId) => {
     }
 
     // Same vote → that game. Different votes → pick one of them randomly.
-    const chosenGame = votes[Math.floor(Math.random() * votes.length)];
+    const chosen = splitVote(votes[Math.floor(Math.random() * votes.length)]);
 
     // The filter `status: 'voting'` makes sure only ONE request starts the
     // game, even if both votes arrive at the same moment.
     const startedRoom = await Room.findOneAndUpdate(
         { _id: room._id, status: 'voting' },
-        { $set: { status: 'playing', selectedGame: chosenGame } },
+        { $set: { status: 'playing', selectedGame: chosen.gameId, selectedMode: chosen.mode } },
         { returnDocument: 'after' }
     );
     if (!startedRoom) {
@@ -205,12 +221,14 @@ const backToVoting = async (roomCode) => {
     const room = await getRoom(roomCode);
     room.status = room.players.length === MAX_PLAYERS ? 'voting' : 'waiting';
     room.selectedGame = null;
+    room.selectedMode = null;
     room.votes = new Map();
     await room.save();
     return room;
 };
 
 export {
+    splitVote,
     createRoom,
     joinRoom,
     getRoom,

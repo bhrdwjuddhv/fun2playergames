@@ -110,6 +110,39 @@ export function GameIcon({ gameId, className = 'size-8' }) {
       </svg>
     )
   }
+  if (gameId === 'rock-paper-scissors') {
+    // a stone, a sheet of paper and a pair of scissors
+    return (
+      <svg {...common}>
+        <path d="M4 10l3-5h5l3 4-2 5H6z" />
+        <path d="M18 4h8l2 2v10H18z" />
+        <circle cx="19" cy="27" r="2.2" />
+        <circle cx="27" cy="27" r="2.2" />
+        <path d="M20.5 25.3L27 18M25.5 25.3L19 18" />
+      </svg>
+    )
+  }
+  if (gameId === 'word-chain') {
+    // two linked chain links with a letter
+    return (
+      <svg {...common}>
+        <rect x="3" y="11" width="15" height="10" rx="5" />
+        <rect x="14" y="11" width="15" height="10" rx="5" />
+        <path d="M8 26l2.5-6 2.5 6M9 24.5h3" />
+      </svg>
+    )
+  }
+  if (gameId === 'shooting-range') {
+    // a target
+    return (
+      <svg {...common}>
+        <circle cx="16" cy="16" r="11" />
+        <circle cx="16" cy="16" r="6.5" />
+        <circle cx="16" cy="16" r="2" />
+        <path d="M16 2v5M16 25v5M2 16h5M25 16h5" />
+      </svg>
+    )
+  }
   // f1-dodge: a race car seen from above
   return (
     <svg {...common}>

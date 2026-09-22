@@ -6,7 +6,8 @@
 //
 // EVERY game module has the same shape (the "contract"):
 //   id, name, description, emoji
-//   create(api, { matchNumber }) → returns an object with:
+//   modes (optional): [{ id, name }] — the first one is the default
+//   create(api, { matchNumber, mode }) → returns an object with:
 //     getState(seat)             what this player (seat 0 or 1) may see
 //     handleAction(seat, action) apply a move; throw an Error if it's invalid.
 //                                Whatever it returns is sent back to the player.
@@ -18,11 +19,17 @@
 import ticTacToe from './tic-tac-toe/game.js';
 import weDraw from './wedraw/game.js';
 import f1Dodge from './f1-dodge/game.js';
+import rockPaperScissors from './rock-paper-scissors/game.js';
+import wordChain from './word-chain/game.js';
+import shootingRange from './shooting-range/game.js';
 
 const games = {
     [ticTacToe.id]: ticTacToe,
     [weDraw.id]: weDraw,
     [f1Dodge.id]: f1Dodge,
+    [rockPaperScissors.id]: rockPaperScissors,
+    [wordChain.id]: wordChain,
+    [shootingRange.id]: shootingRange,
 };
 
 // Object.hasOwn: a plain `games[id]` would also "find" built-in object
@@ -30,9 +37,10 @@ const games = {
 export const getGame = (gameId) => (Object.hasOwn(games, gameId) ? games[gameId] : null);
 
 // The public info the voting screen shows.
-export const gameList = Object.values(games).map(({ id, name, description, emoji }) => ({
+export const gameList = Object.values(games).map(({ id, name, description, emoji, modes }) => ({
     id,
     name,
     description,
     emoji,
+    modes: modes ?? null,
 }));

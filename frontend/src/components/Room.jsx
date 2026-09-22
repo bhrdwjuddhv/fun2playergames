@@ -102,7 +102,11 @@ export default function Room({ room, gameState, onLeave, showToast }) {
         )}
 
         {room.status === 'voting' && (
-          <Voting room={room} opponentName={opponentName} onVote={(gameId) => request('room:vote', { gameId })} />
+          <Voting
+            room={room}
+            opponentName={opponentName}
+            onVote={(gameId, mode) => request('room:vote', { gameId, mode })}
+          />
         )}
 
         {inGame && GameScreen && gameState && (
@@ -172,8 +176,10 @@ function Waiting({ roomCode, onShare }) {
 }
 
 function Voting({ room, opponentName, onVote }) {
+  // Votes are { gameId, mode } (mode is null for games without modes).
   const myVote = room.votes[room.mySeat]
   const opponentVote = room.votes[1 - room.mySeat]
+  const modeName = (game, modeId) => game.modes?.find((mode) => mode.id === modeId)?.name
 
   return (
     <section className="mx-auto flex w-full max-w-lg flex-col px-5 py-10 text-center">
@@ -192,39 +198,71 @@ function Voting({ room, opponentName, onVote }) {
 
       <div className="mt-8 flex flex-col gap-4">
         {room.games.map((game, index) => {
-          const mine = myVote === game.id
+          const mine = myVote?.gameId === game.id
+          const theirs = opponentVote?.gameId === game.id
           return (
-            <Reveal key={game.id} delay={index * 120}>
-              <button
-                type="button"
-                onClick={() => onVote(game.id)}
-                aria-pressed={mine}
-                className={`flex w-full items-center gap-5 rounded-[28px] border bg-white p-5 text-left shadow-soft transition duration-300 hover:scale-[1.015] active:scale-[0.99] ${
+            <Reveal key={game.id} delay={index * 100}>
+              <div
+                className={`overflow-hidden rounded-[28px] border bg-white text-left shadow-soft transition duration-300 ${
                   mine ? 'border-olive ring-1 ring-olive' : 'border-olive/15'
                 }`}
               >
-                <span
-                  className={`flex size-14 shrink-0 items-center justify-center rounded-full border ${
-                    mine ? 'border-olive bg-olive text-white' : 'border-olive/30 text-olive'
-                  }`}
+                {/* Tapping the card votes for the game (its first mode, or the one you picked). */}
+                <button
+                  type="button"
+                  onClick={() => onVote(game.id, mine ? myVote.mode : undefined)}
+                  aria-pressed={mine}
+                  className="flex w-full items-center gap-5 p-5 text-left transition duration-300 hover:bg-ivory/60 active:scale-[0.99]"
                 >
-                  <GameIcon gameId={game.id} className="size-7" />
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block font-display text-2xl text-ink">{game.name}</span>
-                  <span className="block text-sm text-muted">{game.description}</span>
-                  {(mine || opponentVote === game.id) && (
-                    <span className="mt-2 flex flex-wrap gap-1.5">
-                      {mine && <span className="eyebrow rounded-full bg-olive px-3 py-1 text-white">Your pick</span>}
-                      {opponentVote === game.id && (
-                        <span className="eyebrow max-w-full truncate rounded-full bg-saffron/25 px-3 py-1 text-ink">
-                          {opponentName}’s pick
-                        </span>
-                      )}
-                    </span>
-                  )}
-                </span>
-              </button>
+                  <span
+                    className={`flex size-14 shrink-0 items-center justify-center rounded-full border ${
+                      mine ? 'border-olive bg-olive text-white' : 'border-olive/30 text-olive'
+                    }`}
+                  >
+                    <GameIcon gameId={game.id} className="size-7" />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block font-display text-2xl text-ink">{game.name}</span>
+                    <span className="block text-sm text-muted">{game.description}</span>
+                    {(mine || theirs) && (
+                      <span className="mt-2 flex flex-wrap gap-1.5">
+                        {mine && (
+                          <span className="eyebrow rounded-full bg-olive px-3 py-1 text-white">
+                            Your pick{myVote.mode ? ` · ${modeName(game, myVote.mode)}` : ''}
+                          </span>
+                        )}
+                        {theirs && (
+                          <span className="eyebrow max-w-full truncate rounded-full bg-saffron/25 px-3 py-1 text-ink">
+                            {opponentName}’s pick{opponentVote.mode ? ` · ${modeName(game, opponentVote.mode)}` : ''}
+                          </span>
+                        )}
+                      </span>
+                    )}
+                  </span>
+                </button>
+
+                {/* Modes (Best of 3/5/7, Duel/Co-op): each chip is a vote. */}
+                {game.modes && (
+                  <div className="flex flex-wrap gap-2 border-t border-dashed border-olive/25 px-5 py-3">
+                    {game.modes.map((mode) => {
+                      const chosen = mine && myVote.mode === mode.id
+                      return (
+                        <button
+                          key={mode.id}
+                          type="button"
+                          onClick={() => onVote(game.id, mode.id)}
+                          aria-pressed={chosen}
+                          className={`h-10 rounded-full border px-4 text-xs font-semibold tracking-[0.12em] uppercase transition duration-300 active:scale-95 ${
+                            chosen ? 'border-olive bg-olive text-white' : 'border-olive/30 text-olive hover:bg-olive/5'
+                          }`}
+                        >
+                          {mode.name}
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
             </Reveal>
           )
         })}
@@ -239,7 +277,8 @@ function ResultSheet({ room, opponentName, onRematch, onNewGame }) {
   const { result, mySeat, rematchSeats } = room
 
   let title = 'A perfect tie'
-  if (result.winnerSeat === mySeat) title = 'You win'
+  if (result.coop) title = result.won ? 'Victory, together' : 'The core has fallen'
+  else if (result.winnerSeat === mySeat) title = 'You win'
   else if (result.winnerSeat !== null) title = `${opponentName} wins`
 
   const iWantRematch = rematchSeats.includes(mySeat)
@@ -250,6 +289,11 @@ function ResultSheet({ room, opponentName, onRematch, onNewGame }) {
       <div className="mx-auto max-w-md animate-rise rounded-[32px] bg-olive px-6 pt-5 pb-6 text-center text-white shadow-deep">
         <Rings className="mx-auto h-6 w-10 text-saffron" />
         <h2 className="mt-1 truncate font-script text-5xl leading-tight">{title}</h2>
+        {result.coop && (
+          <p className="mt-1 font-display text-lg tracking-[0.15em] uppercase">
+            Team score <span className="text-saffron">·</span> {result.teamScore}
+          </p>
+        )}
         {result.scores && (
           <p className="mt-1 font-display text-lg tracking-[0.15em] uppercase">
             You {result.scores[mySeat]} <span className="text-saffron">·</span> {opponentName} {result.scores[1 - mySeat]}

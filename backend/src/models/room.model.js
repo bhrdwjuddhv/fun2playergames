@@ -51,6 +51,13 @@ const roomSchema = new Schema(
       default: null,
     },
 
+    // Some games have modes (e.g. "bo5" for Rock Paper Scissors,
+    // "coop" for Shooting Range). null for games without modes.
+    selectedMode: {
+      type: String,
+      default: null,
+    },
+
     status: {
       type: String,
       enum: ["waiting", "voting", "playing", "finished"],

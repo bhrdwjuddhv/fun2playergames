@@ -3,6 +3,7 @@
 import { ApiError } from '../utils/index.js';
 import { gameList } from '../games/index.js';
 import * as gameService from '../services/game.service.js';
+import { splitVote } from '../services/room.service.js';
 
 // Every socket of a player joins this channel, so the server can send
 // messages to ONE player (e.g. their secret WeDraw word) instead of the
@@ -50,13 +51,18 @@ const publicRoom = (room, forPlayerId) => {
         roomCode: room.roomCode,
         status: room.status,
         selectedGame: room.selectedGame,
+        selectedMode: room.selectedMode,
         mySeat: room.players.findIndex((player) => player.playerId === forPlayerId),
         players: room.players.map((player, seat) => ({
             seat,
             name: player.name,
             connected: Boolean(player.socketId),
         })),
-        votes: room.players.map((player) => room.votes.get(player.playerId) ?? null),
+        // Per seat: { gameId, mode } or null (not voted yet)
+        votes: room.players.map((player) => {
+            const vote = room.votes.get(player.playerId);
+            return vote ? splitVote(vote) : null;
+        }),
         games: gameList,
         result: meta.result,
         rematchSeats: meta.rematchSeats,

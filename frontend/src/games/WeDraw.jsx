@@ -5,6 +5,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { DashedDivider } from '../components/Decor.jsx'
+import { useTimeLeft } from './useTimeLeft.js'
 
 // Must match COLOR_COUNT / SIZE_COUNT on the server (9 colors, 3 sizes).
 // A muted palette that fits the design; the last color is white = eraser.
@@ -50,19 +51,6 @@ function renderDrawing(canvas, strokes) {
   for (const stroke of strokes) drawStroke(ctx, stroke, canvas.width, canvas.height)
 }
 
-// Counts down locally between server updates.
-function useSecondsLeft(timeLeftMs) {
-  const [secondsLeft, setSecondsLeft] = useState(Math.ceil(timeLeftMs / 1000))
-  useEffect(() => {
-    const deadline = Date.now() + timeLeftMs
-    const tick = () => setSecondsLeft(Math.max(0, Math.ceil((deadline - Date.now()) / 1000)))
-    tick()
-    const interval = setInterval(tick, 250)
-    return () => clearInterval(interval)
-  }, [timeLeftMs])
-  return secondsLeft
-}
-
 const CANVAS_SIZE = { width: 'min(100%, 48dvh, 500px)' }
 
 const PHASE_TITLES = {
@@ -73,7 +61,7 @@ const PHASE_TITLES = {
 }
 
 export default function WeDraw({ state, mySeat, opponentName, sendAction, showToast }) {
-  const secondsLeft = useSecondsLeft(state.timeLeftMs)
+  const secondsLeft = Math.ceil(useTimeLeft(state.timeLeftMs) / 1000)
   const other = 1 - mySeat
   const timed = state.phase === 'drawing' || state.phase === 'guessing'
 
