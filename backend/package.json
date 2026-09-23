@@ -3,13 +3,12 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
+    "build:words": "node scripts/build-words.mjs",
+    "predev": "npm run build:words",
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
     "db:local": "wrangler d1 execute game-playz-db --local --file=./schemas/schema.sql",
-    "db:remote": "wrangler d1 execute game-playz-db --remote --file=./schemas/schema.sql",
-    "words:build": "node scripts/build-words-sql.mjs",
-    "words:local": "wrangler d1 execute game-playz-db --local --file=./schemas/words.sql",
-    "words:remote": "wrangler d1 execute game-playz-db --remote --file=./schemas/words.sql"
+    "db:remote": "wrangler d1 execute game-playz-db --remote --file=./schemas/schema.sql"
   },
   "devDependencies": {
     "wrangler": "^4.137.0",

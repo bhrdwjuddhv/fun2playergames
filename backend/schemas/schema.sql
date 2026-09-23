@@ -28,5 +28,3 @@ CREATE TABLE players (
 CREATE INDEX idx_players_player ON players (room_code, player_id);
 CREATE INDEX idx_rooms_updated ON rooms (updated_at);
 
--- The Word Chain dictionary. Filled by:  npm run words:local / words:remote
-CREATE TABLE IF NOT EXISTS words (word TEXT PRIMARY KEY);

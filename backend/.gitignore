@@ -145,5 +145,5 @@ TODO.md
 .wrangler
 # Cloudflare
 .wrangler/
-# generated: 4 MB of INSERT statements (npm run words:build)
-schemas/words.sql
+# generated at build time (npm run build:words)
+src/games/word-chain/words.generated.js

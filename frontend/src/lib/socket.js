@@ -11,6 +11,19 @@
 // { ack: id, ok: true/false, ... }. Messages the server sends on its own
 // look like { event, data }.
 
+// Where the Worker lives.
+// - Local development: empty. Vite forwards /api and /ws to the Worker.
+// - On Cloudflare Pages: set VITE_SERVER_URL in the Pages build settings to
+//   your Worker address, e.g. https://game-playz.<your-subdomain>.workers.dev
+//   (the site and the Worker are two different addresses there).
+const SERVER_URL = (import.meta.env.VITE_SERVER_URL ?? '').replace(/\/$/, '')
+
+// http(s):// → ws(s)://
+const socketUrl = (roomCode) => {
+  const base = SERVER_URL || window.location.origin
+  return `${base.replace(/^http/, 'ws')}/ws?room=${encodeURIComponent(roomCode)}`
+}
+
 const ACK_TIMEOUT_MS = 8000
 const RECONNECT_MIN_MS = 500
 const RECONNECT_MAX_MS = 5000
@@ -71,9 +84,7 @@ function scheduleReconnect() {
 
 function openSocket(code) {
   return new Promise((resolve, reject) => {
-    // Same address as the page: ws:// for http, wss:// for https.
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const next = new WebSocket(`${protocol}//${window.location.host}/ws?room=${encodeURIComponent(code)}`)
+    const next = new WebSocket(socketUrl(code))
     ws = next
     roomCode = code
 
@@ -126,7 +137,7 @@ export async function send(event, payload = {}) {
   try {
     if (event === 'room:create') {
       // A room is created over plain HTTP; the answer tells us its code.
-      const response = await fetch('/api/rooms', {
+      const response = await fetch(`${SERVER_URL}/api/rooms`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ playerId, name: payload.name }),

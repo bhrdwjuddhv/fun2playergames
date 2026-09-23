@@ -10,6 +10,13 @@
 // The turn timer shrinks as the chain gets longer (more pressure).
 // First to win 2 rounds wins the match.
 
+// The word list is generated at build time (npm run build:words) and
+// bundled with the Worker: one space-separated string, which starts up much
+// faster than a big array. A Set makes "is this a word?" instant.
+import WORD_LIST from './words.generated.js';
+
+const DICTIONARY = new Set(WORD_LIST.split(' '));
+
 const ROUNDS_TO_WIN = 2;
 const MIN_WORD_LENGTH = 3;
 const MAX_WORD_LENGTH = 30;
@@ -26,15 +33,7 @@ export default {
     description: 'Apple → Elephant → Tiger… Keep the chain alive before time runs out.',
     emoji: '🔤',
 
-    // `env` gives a game access to the Worker's bindings. Word Chain uses the
-    // D1 database, where all 275,000 English words are stored. (Putting the
-    // list in the code itself would make the Worker slow to start.)
-    create(api, { matchNumber, env }) {
-        const isRealWord = async (word) => {
-            const row = await env.DB.prepare('SELECT 1 AS found FROM words WHERE word = ?').bind(word).first();
-            return Boolean(row);
-        };
-
+    create(api, { matchNumber }) {
         let round = 0;
         let phase = 'playing';
         let turn = 0;
@@ -107,8 +106,7 @@ export default {
                 };
             },
 
-            // async, because looking a word up in the database takes a moment.
-            async handleAction(seat, action) {
+            handleAction(seat, action) {
                 if (action.type !== 'word') throw new Error('Unknown action');
                 if (phase !== 'playing') throw new Error('Wait for the next round');
                 if (seat !== turn) throw new Error("It's not your turn");
@@ -132,14 +130,10 @@ export default {
                     loseRound(seat, `“${word}” was already used`);
                     return { accepted: false };
                 }
-                if (!(await isRealWord(word))) {
-                    // While we waited for the database the round may have ended
-                    // (the timer ran out) — then this word doesn't count.
-                    if (phase !== 'playing' || seat !== turn) return { accepted: false };
+                if (!DICTIONARY.has(word)) {
                     loseRound(seat, `“${word}” isn’t in the dictionary`);
                     return { accepted: false };
                 }
-                if (phase !== 'playing' || seat !== turn) return { accepted: false };
 
                 chain.push({ word, seat });
                 used.add(word);
