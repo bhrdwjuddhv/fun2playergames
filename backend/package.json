@@ -8,7 +8,9 @@
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
     "db:local": "wrangler d1 execute game-playz-db --local --file=./schemas/schema.sql",
-    "db:remote": "wrangler d1 execute game-playz-db --remote --file=./schemas/schema.sql"
+    "db:remote": "wrangler d1 execute game-playz-db --remote --file=./schemas/schema.sql",
+    "build:config": "node scripts/build-config.mjs",
+    "build": "npm run build:words && npm run build:config"
   },
   "devDependencies": {
     "wrangler": "^4.137.0",

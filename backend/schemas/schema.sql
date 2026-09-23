@@ -7,20 +7,20 @@ DROP TABLE IF EXISTS rooms;
 
 CREATE TABLE rooms (
   room_code     TEXT PRIMARY KEY,
-  status        TEXT NOT NULL DEFAULT 'waiting',  -- waiting | voting | playing | finished
+  status        TEXT NOT NULL DEFAULT 'waiting',  
   selected_game TEXT,
   selected_mode TEXT,
-  created_at    INTEGER NOT NULL,                 -- milliseconds since 1970
+  created_at    INTEGER NOT NULL,                
   updated_at    INTEGER NOT NULL
 );
 
 CREATE TABLE players (
   room_code TEXT NOT NULL REFERENCES rooms(room_code) ON DELETE CASCADE,
-  seat      INTEGER NOT NULL,                     -- 0 or 1
-  player_id TEXT NOT NULL,                        -- the id the browser keeps
+  seat      INTEGER NOT NULL,                    
+  player_id TEXT NOT NULL,                       
   name      TEXT NOT NULL DEFAULT 'Player',
-  connected INTEGER NOT NULL DEFAULT 1,           -- SQLite has no boolean: 0/1
-  vote      TEXT,                                 -- "wedraw" or "rock-paper-scissors:bo5"
+  connected INTEGER NOT NULL DEFAULT 1,           
+  vote      TEXT,                                 
   joined_at INTEGER NOT NULL,
   PRIMARY KEY (room_code, seat)
 );

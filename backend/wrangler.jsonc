@@ -14,14 +14,16 @@
 		"CLIENT_ORIGIN": ""
 	},
 
-	// D1 = the SQL database. Rooms, players and the Word Chain dictionary.
-	// Create it once with:  npx wrangler d1 create game-playz-db
-	// then paste the id it prints below.
+	// D1 = the SQL database (rooms and players).
+	//
+	// There is no "database_id" here on purpose: it is not committed to
+	// GitHub. Cloudflare puts it in during the build, from the build variable
+	// D1_DATABASE_ID (see scripts/build-config.mjs and DEPLOY.md).
+	// Local development does not need it — wrangler makes its own local copy.
 	"d1_databases": [
 		{
 			"binding": "DB",
-			"database_name": "game-playz-db",
-			"database_id": "REPLACE_WITH_YOUR_DATABASE_ID"
+			"database_name": "game-playz-db"
 		}
 	],
 
