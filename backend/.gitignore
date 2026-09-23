@@ -142,3 +142,8 @@ vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
 TODO.md
+.wrangler
+# Cloudflare
+.wrangler/
+# generated: 4 MB of INSERT statements (npm run words:build)
+schemas/words.sql

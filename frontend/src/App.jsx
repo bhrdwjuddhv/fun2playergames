@@ -42,11 +42,13 @@ export default function App() {
 
     const onGameState = (state) => setGameState(state)
 
-    // Runs on the first connection AND after every reconnect.
-    // Socket.IO gives us a NEW socket.id each time, so we rejoin the room
-    // with our playerId and the server updates our socketId.
-    const onConnect = async () => {
-      setConnected(true)
+    // The connection itself rejoins the room after a drop (see lib/socket.js),
+    // so here we only follow whether we are connected.
+    const onConnect = () => setConnected(true)
+    const onDisconnect = () => setConnected(false)
+
+    // On a page refresh: rejoin the room this tab was in.
+    const rejoinSavedRoom = async () => {
       const roomCode = savedRoomCode.get()
       if (!roomCode) return
       const response = await send('room:join', { roomCode, playerId, name: savedName.get() })
@@ -58,13 +60,11 @@ export default function App() {
       }
     }
 
-    const onDisconnect = () => setConnected(false)
-
     socket.on('room:update', onRoomUpdate)
     socket.on('game:state', onGameState)
     socket.on('connect', onConnect)
     socket.on('disconnect', onDisconnect)
-    if (socket.connected) onConnect()
+    rejoinSavedRoom()
 
     // Cleanup: remove listeners when App unmounts (and in React's
     // StrictMode double-run during development).

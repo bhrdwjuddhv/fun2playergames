@@ -1,0 +1,34 @@
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "game-playz",
+	"main": "src/index.js",
+	"compatibility_date": "2026-09-23",
+
+	// The built React app (frontend/dist) is served by this same Worker.
+	// single-page-application: unknown paths return index.html, so /?room=ABC works.
+	"assets": {
+		"directory": "../frontend/dist",
+		"binding": "ASSETS",
+		"not_found_handling": "single-page-application"
+	},
+
+	// D1 = the SQL database. Rooms, players and the Word Chain dictionary.
+	// Create it once with:  npx wrangler d1 create game-playz-db
+	// then paste the id it prints below.
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "game-playz-db",
+			"database_id": "REPLACE_WITH_YOUR_DATABASE_ID"
+		}
+	],
+
+	// One Durable Object per room: it holds the WebSocket connections and
+	// the live game. This is what replaces the old Socket.IO server.
+	"durable_objects": {
+		"bindings": [{ "name": "ROOM", "class_name": "GameRoom" }]
+	},
+	"migrations": [{ "tag": "v1", "new_sqlite_classes": ["GameRoom"] }],
+
+	"observability": { "enabled": true }
+}

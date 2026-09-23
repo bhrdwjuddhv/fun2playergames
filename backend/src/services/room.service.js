@@ -1,15 +1,17 @@
 // room.service.js
-// All room DATABASE logic lives here. Socket handlers and the HTTP
-// controller call these functions, so the rules exist in ONE place.
-// No `req`/`res`, no `socket`/`io` here — only plain inputs.
-// Each function returns the room, or throws an ApiError.
+// All room DATABASE logic (D1 / SQL). Called from the room's Durable Object
+// and from the Worker. No WebSockets and no game rules here.
+//
+// WHY THERE ARE NO "TWO PEOPLE AT ONCE" PROBLEMS ANY MORE:
+// Every change to a room goes through that room's Durable Object, and a
+// Durable Object handles one thing at a time. So a room can never be
+// changed by two requests at the same moment.
 
-import Room from '../models/room.model.js';
-import generateRoomCode from '../utils/generateCode.js';
 import { ApiError } from '../utils/index.js';
 import { getGame } from '../games/index.js';
 
 const MAX_PLAYERS = 2;
+const ROOM_MAX_AGE_MS = 24 * 60 * 60 * 1000; // old rooms are deleted after a day
 
 const cleanString = (value, fieldName) => {
     if (typeof value !== 'string' || value.trim() === '') {
@@ -18,13 +20,12 @@ const cleanString = (value, fieldName) => {
     return value.trim();
 };
 
+// Room codes are stored in UPPERCASE, so "ab12cd" must become "AB12CD".
 const cleanRoomCode = (roomCode) => cleanString(roomCode, 'Room code').toUpperCase();
 
-// FIX (security):
-// playerId is used inside a database path: `votes.<playerId>`.
-// A "." or "$" in it would change the meaning of the update
-// ("votes.a.b" = a nested field). So only allow the characters the
-// frontend generates (letters, digits, _ and -).
+// Only allow the characters the frontend generates. Values from a client
+// are never trusted; every query below also uses ? placeholders, so a value
+// can never be read as SQL.
 const PLAYER_ID_PATTERN = /^[A-Za-z0-9_-]{8,64}$/;
 
 const cleanPlayerId = (playerId) => {
@@ -34,207 +35,227 @@ const cleanPlayerId = (playerId) => {
     return playerId;
 };
 
-// Names are optional and only for display.
 const cleanName = (name) => {
-    if (typeof name !== 'string' || name.trim() === '') {
-        return 'Player';
-    }
+    if (typeof name !== 'string' || name.trim() === '') return 'Player';
     return name.trim().slice(0, 16);
 };
 
-// socketId is NOT validated here on purpose: it must always come from
-// `socket.id` on the server, never from the client.
-const createRoom = async (playerId, name, socketId) => {
-    const player = { playerId: cleanPlayerId(playerId), name: cleanName(name), socketId };
-
-    const newRoom = () => Room.create({
-        roomCode: generateRoomCode(),
-        players: [player],
-    });
-
-    // roomCode is `unique`. In the very rare case that the random code
-    // already exists, MongoDB throws error code 11000 → try one new code.
-    try {
-        return await newRoom();
-    } catch (err) {
-        if (err.code === 11000) {
-            return await newRoom();
-        }
-        throw err;
-    }
-};
-
-const joinRoom = async (roomCode, playerId, name, socketId) => {
-    const cleanCode = cleanRoomCode(roomCode);
-    const cleanId = cleanPlayerId(playerId);
-    const cleanPlayerName = cleanName(name);
-
-    // CASE 1: The player is already in this room (e.g. they refreshed the
-    // page and got a NEW socket.id). This is not an error — just save the new
-    // socketId. `players.$` means "the player that matched the filter".
-    const rejoinedRoom = await Room.findOneAndUpdate(
-        { roomCode: cleanCode, 'players.playerId': cleanId },
-        { $set: { 'players.$.socketId': socketId, 'players.$.name': cleanPlayerName } },
-        { returnDocument: 'after' } // return the room AFTER the update
-    );
-    if (rejoinedRoom) {
-        return rejoinedRoom;
-    }
-
-    // CASE 2: A new player. The check ("is there a free spot?") and the push
-    // happen in ONE database operation, so two people joining at the same
-    // moment can't both get the last spot.
-    // 'players.1': { $exists: false } means "there is no 2nd player yet".
-    const joinedRoom = await Room.findOneAndUpdate(
-        { roomCode: cleanCode, [`players.${MAX_PLAYERS - 1}`]: { $exists: false } },
-        {
-            $push: { players: { playerId: cleanId, name: cleanPlayerName, socketId } },
-            // A room always has 1 player before this (the creator), so after
-            // the push it has 2 → time to vote.
-            $set: { status: 'voting' },
-        },
-        { returnDocument: 'after' }
-    );
-    if (joinedRoom) {
-        return joinedRoom;
-    }
-
-    // Nothing matched: either the room doesn't exist, or it's full.
-    const roomExists = await Room.exists({ roomCode: cleanCode });
-    if (!roomExists) {
-        throw new ApiError(404, 'Room not found');
-    }
-    throw new ApiError(400, 'Room is already full');
-};
-
-const getRoom = async (roomCode) => {
-    const room = await Room.findOne({ roomCode: cleanRoomCode(roomCode) });
-    if (!room) {
-        throw new ApiError(404, 'Room not found');
-    }
-    return room;
-};
-
-// Removes the player. Returns the updated room, or null if the room was
-// deleted because nobody is left.
-const leaveRoom = async (roomCode, playerId) => {
-    const room = await Room.findOneAndUpdate(
-        { roomCode: cleanRoomCode(roomCode) },
-        {
-            $pull: { players: { playerId: cleanPlayerId(playerId) } },
-            // The remaining player waits for a new opponent.
-            $set: { status: 'waiting', selectedGame: null, selectedMode: null, votes: {} },
-        },
-        { returnDocument: 'after' }
-    );
-    if (!room) {
-        throw new ApiError(404, 'Room not found');
-    }
-
-    if (room.players.length === 0) {
-        await Room.deleteOne({ _id: room._id });
-        return null;
-    }
-    return room;
-};
-
-// Called when a socket disconnects (closed tab, lost Wi-Fi...).
-// The player stays in the room so they can come back; we only clear their
-// socketId. The filter also checks the socketId: if the player already
-// reconnected with a NEW socket, the old socket's disconnect must not
-// mark them as offline.
-const markDisconnected = async (roomCode, playerId, socketId) => {
-    return Room.findOneAndUpdate(
-        { roomCode, players: { $elemMatch: { playerId, socketId } } },
-        { $set: { 'players.$.socketId': null } },
-        { returnDocument: 'after' }
-    );
-};
-
-// A vote is saved as one string: "gameId" or "gameId:mode".
-const splitVote = (vote) => {
+// A vote is stored as one string: "gameId" or "gameId:mode".
+export const splitVote = (vote) => {
+    if (!vote) return null;
     const [gameId, mode = null] = vote.split(':');
     return { gameId, mode };
 };
 
+// Reads the room plus its players, and turns the SQL rows (snake_case) into
+// one object the rest of the code can use (camelCase).
+export const getRoom = async (db, roomCode) => {
+    const code = cleanRoomCode(roomCode);
+    const row = await db.prepare('SELECT * FROM rooms WHERE room_code = ?').bind(code).first();
+    if (!row) return null;
+
+    const { results } = await db
+        .prepare('SELECT * FROM players WHERE room_code = ? ORDER BY seat')
+        .bind(code)
+        .all();
+
+    return {
+        roomCode: row.room_code,
+        status: row.status,
+        selectedGame: row.selected_game,
+        selectedMode: row.selected_mode,
+        players: results.map((player) => ({
+            seat: player.seat,
+            playerId: player.player_id,
+            name: player.name,
+            connected: player.connected === 1,
+            vote: player.vote,
+        })),
+    };
+};
+
+const requireRoom = async (db, roomCode) => {
+    const room = await getRoom(db, roomCode);
+    if (!room) throw new ApiError(404, 'Room not found');
+    return room;
+};
+
+const touch = (db, roomCode) =>
+    db.prepare('UPDATE rooms SET updated_at = ? WHERE room_code = ?').bind(Date.now(), roomCode);
+
+// Creates the room with its first player. Returns false if the code is
+// already taken (the Worker then tries another code).
+export const createRoom = async (db, roomCode, playerId, name) => {
+    const code = cleanRoomCode(roomCode);
+    const id = cleanPlayerId(playerId);
+    const now = Date.now();
+
+    const existing = await db.prepare('SELECT 1 FROM rooms WHERE room_code = ?').bind(code).first();
+    if (existing) return false;
+
+    // batch() runs both statements as one transaction: either the room AND
+    // the player are saved, or neither is.
+    await db.batch([
+        db
+            .prepare('INSERT INTO rooms (room_code, status, created_at, updated_at) VALUES (?, ?, ?, ?)')
+            .bind(code, 'waiting', now, now),
+        db
+            .prepare('INSERT INTO players (room_code, seat, player_id, name, connected, joined_at) VALUES (?, ?, ?, ?, ?, ?)')
+            .bind(code, 0, id, cleanName(name), 0, now),
+    ]);
+    return true;
+};
+
+// Also used to RECONNECT: the same playerId simply comes back to their seat.
+export const joinRoom = async (db, roomCode, playerId, name) => {
+    const code = cleanRoomCode(roomCode);
+    const id = cleanPlayerId(playerId);
+    const playerName = cleanName(name);
+    const room = await requireRoom(db, code);
+
+    const existing = room.players.find((player) => player.playerId === id);
+    if (existing) {
+        await db.batch([
+            db
+                .prepare('UPDATE players SET name = ?, connected = 1 WHERE room_code = ? AND player_id = ?')
+                .bind(playerName, code, id),
+            touch(db, code),
+        ]);
+        return getRoom(db, code);
+    }
+
+    if (room.players.length >= MAX_PLAYERS) {
+        throw new ApiError(400, 'Room is already full');
+    }
+
+    // Take the first free seat (0 or 1) — the other player keeps theirs.
+    const seat = [0, 1].find((free) => !room.players.some((player) => player.seat === free));
+    const full = room.players.length + 1 === MAX_PLAYERS;
+
+    await db.batch([
+        db
+            .prepare('INSERT INTO players (room_code, seat, player_id, name, connected, joined_at) VALUES (?, ?, ?, ?, 1, ?)')
+            .bind(code, seat, id, playerName, Date.now()),
+        db
+            .prepare('UPDATE rooms SET status = ?, updated_at = ? WHERE room_code = ?')
+            .bind(full ? 'voting' : 'waiting', Date.now(), code),
+    ]);
+    return getRoom(db, code);
+};
+
+// Removes the player. Returns the updated room, or null if the room was
+// deleted because nobody is left.
+export const leaveRoom = async (db, roomCode, playerId) => {
+    const code = cleanRoomCode(roomCode);
+    const id = cleanPlayerId(playerId);
+
+    await db.prepare('DELETE FROM players WHERE room_code = ? AND player_id = ?').bind(code, id).run();
+
+    const room = await getRoom(db, code);
+    if (!room) return null;
+
+    if (room.players.length === 0) {
+        await db.prepare('DELETE FROM rooms WHERE room_code = ?').bind(code).run();
+        return null;
+    }
+
+
+    // The player left behind waits for a new opponent.
+    await db.batch([
+        db
+            .prepare("UPDATE rooms SET status = 'waiting', selected_game = NULL, selected_mode = NULL, updated_at = ? WHERE room_code = ?")
+            .bind(Date.now(), code),
+        db.prepare('UPDATE players SET vote = NULL WHERE room_code = ?').bind(code),
+    ]);
+    return getRoom(db, code);
+};
+
+// Closed tab / lost Wi-Fi. The player keeps their seat so they can come back.
+export const setConnected = async (db, roomCode, playerId, connected) => {
+    await db
+        .prepare('UPDATE players SET connected = ? WHERE room_code = ? AND player_id = ?')
+        .bind(connected ? 1 : 0, cleanRoomCode(roomCode), cleanPlayerId(playerId))
+        .run();
+    return getRoom(db, roomCode);
+};
+
 // Saves one vote. When both players have voted, picks the game.
 // Returns { room, gameStarted }.
-const castVote = async (roomCode, playerId, gameId, mode) => {
-    const cleanId = cleanPlayerId(playerId);
+export const castVote = async (db, roomCode, playerId, gameId, mode) => {
+    const code = cleanRoomCode(roomCode);
+    const id = cleanPlayerId(playerId);
+    const room = await requireRoom(db, code);
 
-    // Never trust the client: only accept games (and modes) that really exist.
-    const game = typeof gameId === 'string' ? getGame(gameId) : null;
-    if (!game) {
-        throw new ApiError(400, 'Unknown game');
+    if (room.status !== 'voting' || !room.players.some((player) => player.playerId === id)) {
+        throw new ApiError(400, "You can't vote right now");
     }
+
+    // Never trust the client: only accept games (and modes) that exist.
+    const game = typeof gameId === 'string' ? getGame(gameId) : null;
+    if (!game) throw new ApiError(400, 'Unknown game');
+
     let vote = gameId;
     if (game.modes) {
-        // No mode chosen → the game's first (default) mode.
-        const chosenMode = mode ?? game.modes[0].id;
+        const chosenMode = mode ?? game.modes[0].id; // no mode chosen → the default
         if (!game.modes.some((option) => option.id === chosenMode)) {
             throw new ApiError(400, 'Unknown game mode');
         }
         vote = `${gameId}:${chosenMode}`;
     }
 
-    const room = await Room.findOneAndUpdate(
-        { roomCode, status: 'voting', 'players.playerId': cleanId },
-        { $set: { [`votes.${cleanId}`]: vote } },
-        { returnDocument: 'after' }
-    );
-    if (!room) {
-        throw new ApiError(400, "You can't vote right now");
-    }
+    await db
+        .prepare('UPDATE players SET vote = ? WHERE room_code = ? AND player_id = ?')
+        .bind(vote, code, id)
+        .run();
 
-    const votes = room.players.map((player) => room.votes.get(player.playerId));
-    const everyoneVoted = room.players.length === MAX_PLAYERS && votes.every(Boolean);
+    const updated = await getRoom(db, code);
+    const votes = updated.players.map((player) => player.vote);
+    const everyoneVoted = updated.players.length === MAX_PLAYERS && votes.every(Boolean);
     if (!everyoneVoted) {
-        return { room, gameStarted: false };
+        return { room: updated, gameStarted: false };
     }
 
-    // Same vote → that game. Different votes → pick one of them randomly.
+    // Same vote → that game. Different votes → pick one of them at random.
     const chosen = splitVote(votes[Math.floor(Math.random() * votes.length)]);
+    await db
+        .prepare("UPDATE rooms SET status = 'playing', selected_game = ?, selected_mode = ?, updated_at = ? WHERE room_code = ?")
+        .bind(chosen.gameId, chosen.mode, Date.now(), code)
+        .run();
 
-    // The filter `status: 'voting'` makes sure only ONE request starts the
-    // game, even if both votes arrive at the same moment.
-    const startedRoom = await Room.findOneAndUpdate(
-        { _id: room._id, status: 'voting' },
-        { $set: { status: 'playing', selectedGame: chosen.gameId, selectedMode: chosen.mode } },
-        { returnDocument: 'after' }
-    );
-    if (!startedRoom) {
-        return { room, gameStarted: false };
-    }
-    return { room: startedRoom, gameStarted: true };
+    return { room: await getRoom(db, code), gameStarted: true };
 };
 
-const setStatus = async (roomCode, status) => {
-    return Room.findOneAndUpdate(
-        { roomCode },
-        { $set: { status } },
-        { returnDocument: 'after' }
-    );
+export const setStatus = async (db, roomCode, status) => {
+    await db
+        .prepare('UPDATE rooms SET status = ?, updated_at = ? WHERE room_code = ?')
+        .bind(status, Date.now(), cleanRoomCode(roomCode))
+        .run();
+    return getRoom(db, roomCode);
 };
 
-// After a game: go back to picking a game (or waiting, if alone).
-const backToVoting = async (roomCode) => {
-    const room = await getRoom(roomCode);
-    room.status = room.players.length === MAX_PLAYERS ? 'voting' : 'waiting';
-    room.selectedGame = null;
-    room.selectedMode = null;
-    room.votes = new Map();
-    await room.save();
-    return room;
+// After a game: back to picking a game (or waiting, if alone).
+export const backToVoting = async (db, roomCode) => {
+    const code = cleanRoomCode(roomCode);
+    const room = await requireRoom(db, code);
+    const status = room.players.length === MAX_PLAYERS ? 'voting' : 'waiting';
+
+    await db.batch([
+        db
+            .prepare('UPDATE rooms SET status = ?, selected_game = NULL, selected_mode = NULL, updated_at = ? WHERE room_code = ?')
+            .bind(status, Date.now(), code),
+        db.prepare('UPDATE players SET vote = NULL WHERE room_code = ?').bind(code),
+    ]);
+    return getRoom(db, code);
 };
 
-export {
-    splitVote,
-    createRoom,
-    joinRoom,
-    getRoom,
-    leaveRoom,
-    markDisconnected,
-    castVote,
-    setStatus,
-    backToVoting,
+// Rooms nobody has touched for a day are deleted. (MongoDB did this by
+// itself with a TTL index; in SQL we run the clean-up ourselves.)
+export const deleteOldRooms = (db) => {
+    const cutoff = Date.now() - ROOM_MAX_AGE_MS;
+    return db.batch([
+        db
+            .prepare('DELETE FROM players WHERE room_code IN (SELECT room_code FROM rooms WHERE updated_at < ?)')
+            .bind(cutoff),
+        db.prepare('DELETE FROM rooms WHERE updated_at < ?').bind(cutoff),
+    ]);
 };
