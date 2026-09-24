@@ -132,6 +132,19 @@ export function GameIcon({ gameId, className = 'size-8' }) {
       </svg>
     )
   }
+  if (gameId === 'chain-reaction') {
+    return (
+      <svg {...common}>
+        <circle cx="16" cy="16" r="3.2" />
+        <circle cx="16" cy="16" r="7.5" strokeDasharray="2 3" />
+        <path d="M16 6V2M16 30v-4M6 16H2M30 16h-4" />
+        <circle cx="16" cy="3" r="1.6" />
+        <circle cx="16" cy="29" r="1.6" />
+        <circle cx="3" cy="16" r="1.6" />
+        <circle cx="29" cy="16" r="1.6" />
+      </svg>
+    )
+  }
   if (gameId === 'shooting-range') {
     // a target
     return (

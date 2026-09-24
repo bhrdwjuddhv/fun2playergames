@@ -21,6 +21,7 @@
   --animate-rise: rise 1s ease-out both;
   --animate-invite: invite 4.5s ease-out both;
   --animate-slow-zoom: slow-zoom 20s ease-out both;
+  --animate-boom: boom 450ms ease-out;
 
   @keyframes rise {
     from { opacity: 0; transform: translateY(24px); }
@@ -31,6 +32,12 @@
     0% { opacity: 0; transform: translate(-50%, -46%) scale(0.92) rotate(-3deg); }
     18%, 78% { opacity: 1; transform: translate(-50%, -50%) scale(1) rotate(-3deg); }
     100% { opacity: 0; transform: translate(-50%, -54%) scale(1.02) rotate(-3deg); }
+  }
+  /* a cell bursting in Chain Reaction */
+  @keyframes boom {
+    0% { transform: scale(1); }
+    35% { transform: scale(1.18); }
+    100% { transform: scale(1); }
   }
   @keyframes slow-zoom {
     from { transform: scale(1); }

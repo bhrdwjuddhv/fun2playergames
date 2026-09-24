@@ -141,7 +141,7 @@ export default function Home({ showToast }) {
           <div>
             <Reveal>
               <p className="eyebrow text-white/75">The line-up</p>
-              <h2 className="mt-3 font-display text-4xl sm:text-5xl">Six games, one evening</h2>
+              <h2 className="mt-3 font-display text-4xl sm:text-5xl">Seven games, one evening</h2>
             </Reveal>
             <ul className="mt-8 divide-y divide-white/20 border-y border-white/20">
               {gameShowcase.map((game, index) => (

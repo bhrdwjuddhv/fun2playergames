@@ -22,6 +22,7 @@ import f1Dodge from './f1-dodge/game.js';
 import rockPaperScissors from './rock-paper-scissors/game.js';
 import wordChain from './word-chain/game.js';
 import shootingRange from './shooting-range/game.js';
+import chainReaction from './chain-reaction/game.js';
 
 const games = {
     [ticTacToe.id]: ticTacToe,
@@ -30,6 +31,7 @@ const games = {
     [rockPaperScissors.id]: rockPaperScissors,
     [wordChain.id]: wordChain,
     [shootingRange.id]: shootingRange,
+    [chainReaction.id]: chainReaction,
 };
 
 // Object.hasOwn: a plain `games[id]` would also "find" built-in object
